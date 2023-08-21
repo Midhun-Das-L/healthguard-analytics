@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-df_pd=pd.read_csv(r"C:\Users\USER\HCA\django_dasvoard\home\model_data.csv")
+df_pd=pd.read_csv(r"/home/bobyf/django_dasvoard/home/model_data.csv")
 
 
 # %% [code] {"jupyter":{"outputs_hidden":false},"execution":{"iopub.status.busy":"2023-08-20T10:47:11.276542Z","iopub.status.idle":"2023-08-20T10:47:11.276952Z"}}
@@ -49,6 +49,12 @@ def index(request):
     return render(request, 'pages/index.html')
 
 def fraud_detection_page(request):
+    if request.method == "POST":
+        form_data=request.POST
+        print(form_data,"this  is the form data")
+        print(request.FILES,"thi is the files")
+        return render(request, 'pages/Success.html')
+
     print(logit_pred)
     return render(request, 'pages/fraud.html')
 
