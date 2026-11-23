@@ -22,10 +22,11 @@ TMP = Path(tempfile.mkdtemp(prefix="hg-tests-"))
 class HealthGuardTests(TestCase):
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
+        # Sample files must exist BEFORE super().setUpClass(), which runs setUpTestData (model training).
         sample_data.write_kaggle_style(TMP / "sample", "Train", n_providers=200, n_beneficiaries=2000, seed=3)
         sample_data.write_kaggle_style(TMP / "demo", "Test", n_providers=40, n_beneficiaries=800, seed=4,
                                        provider_start=70001, bene_start=50001, claim_start=700000)
+        super().setUpClass()
 
     @classmethod
     def tearDownClass(cls):
