@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Score new claims{% endblock %}
+{% block heading %}Score new claims{% endblock %}
+{% block subheading %}Upload Medicare claim files in the Kaggle format; every provider is scored and added to the dashboard{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-7"><div class="card">
+    <div class="card-header">Upload files</div>
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data" id="upload-form">{% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger text-white py-2">{{ form.non_field_errors }}</div>{% endif %}
+        {% for field in form %}
+          <div class="mb-3">
+            <label class="form-label small" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="small muted">{{ field.help_text }}</div>{% endif %}
+            {% for err in field.errors %}<div class="small text-danger">{{ err }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <button class="btn btn-primary mb-0" type="submit" id="upload-btn">Score providers</button>
+        <span class="small muted ms-2 d-none" id="upload-wait">Building features and scoring… large files can take a minute.</span>
+      </form>
+    </div>
+  </div></div>
+  <div class="col-lg-5">
+    <div class="card mb-3"><div class="card-header">Try it with demo files</div><div class="card-body">
+      <p class="small secondary">150 unseen providers in the same format, with known outcomes so you can check accuracy. Download them, then upload them on the left.</p>
+      <ul class="small mb-0">{% for key, name in demo_files.items %}<li><a href="{% url 'sample_download' 'demo' name %}">{{ name }}</a> <span class="muted">({{ key }})</span></li>{% empty %}<li class="muted">Run <code>python manage.py setup_demo</code> to create them.</li>{% endfor %}</ul>
+    </div></div>
+    <div class="card"><div class="card-header">Required columns</div><div class="card-body small secondary">
+      <p class="mb-1"><strong>Beneficiary:</strong> BeneID, DOB, DOD, Gender, RenalDiseaseIndicator, NoOfMonths_PartACov/PartBCov, ChronicCond_* (11), IP/OP annual reimbursement &amp; deductible.</p>
+      <p class="mb-1"><strong>Inpatient / Outpatient:</strong> BeneID, ClaimID, ClaimStartDt, ClaimEndDt, Provider, InscClaimAmtReimbursed, DeductibleAmtPaid; plus physicians, diagnosis/procedure codes, AdmissionDt, DischargeDt, DiagnosisGroupCode where available.</p>
+      <p class="mb-0"><strong>Known outcomes (optional):</strong> Provider, PotentialFraud.</p>
+    </div></div>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header">Scoring history</div>
+  <div class="table-responsive"><table class="table">
+    <thead><tr><th>Batch</th><th>Source</th><th>Model</th><th class="num">Providers</th><th class="num">Claims</th><th class="num">Reimbursed</th><th>Created</th><th></th></tr></thead>
+    <tbody>{% for b in batches %}
+      <tr><td><a href="{% url 'dashboard' %}?batch={{ b.id }}">{{ b.name }}</a></td><td>{{ b.get_source_display }}</td><td>{{ b.model_name }}</td>
+        <td class="num">{{ b.n_providers|intcomma }}</td><td class="num">{{ b.n_claims|intcomma }}</td><td class="num">${{ b.total_reimbursed|floatformat:0|intcomma }}</td>
+        <td>{{ b.created_at|date:"Y-m-d H:i" }}{% if b.created_by %} · {{ b.created_by.username }}{% endif %}</td>
+        <td><form method="post" action="{% url 'batch_delete' b.id %}" onsubmit="return confirm('Delete this batch and all its reviews?')">{% csrf_token %}<button class="btn btn-link btn-sm text-danger p-0 mb-0">Delete</button></form></td></tr>
+    {% empty %}<tr><td colspan="8" class="muted">No batches yet.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+document.getElementById('upload-form').addEventListener('submit', () => {
+  document.getElementById('upload-btn').disabled = true;
+  document.getElementById('upload-wait').classList.remove('d-none');
+});
+</script>{% endblock %}

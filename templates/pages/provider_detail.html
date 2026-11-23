@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ p.provider_id }}{% endblock %}
+{% block heading %}Provider {{ p.provider_id }}{% endblock %}
+{% block subheading %}{{ p.batch.name }} · ranked #{{ rank }} of {{ peer_count }} by fraud risk{% endblock %}
+{% block actions %}<a class="btn btn-sm btn-outline-secondary mb-0" href="{% url 'provider_list' %}?batch={{ p.batch_id }}">← Back to list</a>{% endblock %}
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="label">Fraud probability</div><div class="value">{% widthratio p.fraud_probability 1 100 %}%</div><div class="foot"><span class="risk risk-{{ p.risk_level }}">{{ p.risk_level }} risk</span></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="label">Claims</div><div class="value">{{ p.n_claims|intcomma }}</div><div class="foot">{{ p.inpatient_claims|intcomma }} inpatient ({% widthratio p.inpatient_share 1 100 %}%)</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="label">Total reimbursed</div><div class="value">${{ p.total_reimbursed|floatformat:0|intcomma }}</div><div class="foot">${{ p.reimbursed_per_claim|floatformat:0|intcomma }} per claim</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="label">Beneficiaries</div><div class="value">{{ p.n_beneficiaries|intcomma }}</div><div class="foot">avg age {{ p.avg_patient_age|floatformat:0 }}{% if p.actual_fraud is not None %} · known: {% if p.actual_fraud %}fraud{% else %}not fraud{% endif %}{% endif %}</div></div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7"><div class="card h-100">
+    <div class="card-header">Why this provider scores {{ p.risk_level|lower }}<span class="hint">Most important model features: this provider vs. the median honest provider (training data)</span></div>
+    <div class="card-body"><div class="chart-box tall"><canvas id="explainChart"></canvas></div></div>
+    <div class="table-responsive"><table class="table table-sm">
+      <thead><tr><th>Feature</th><th class="num">This provider</th><th class="num">Honest median</th><th class="num">Fraud median</th><th class="num">× honest</th></tr></thead>
+      <tbody>{% for e in explanation %}<tr><td>{{ e.label }}</td><td class="num">{{ e.value|floatformat:1|intcomma }}</td><td class="num">{{ e.honest_median|floatformat:1|intcomma }}</td><td class="num">{{ e.fraud_median|floatformat:1|intcomma }}</td><td class="num">{% if e.ratio is not None %}{{ e.ratio|floatformat:1 }}×{% else %}–{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div></div>
+  <div class="col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header">Investigation</div>
+      <div class="card-body">
+        <form method="post" id="review-form">{% csrf_token %}
+          <label class="small secondary" for="{{ form.review_status.id_for_label }}">Status</label>
+          {{ form.review_status }}
+          <label class="small secondary mt-2" for="{{ form.notes.id_for_label }}">Notes</label>
+          {{ form.notes }}
+          <div class="d-flex align-items-center gap-2 mt-3">
+            <button class="btn btn-primary mb-0" type="submit">Save review</button>
+            <span id="review-msg" class="small muted">{% if p.reviewed_at %}Last updated {{ p.reviewed_at|naturaltime }}{% if p.reviewed_by %} by {{ p.reviewed_by.username }}{% endif %}{% endif %}</span>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">All 31 model features</div>
+      <div class="table-responsive" style="max-height:420px"><table class="table table-sm">
+        <thead><tr><th>Feature</th><th class="num">Value</th><th class="num">Honest median</th></tr></thead>
+        <tbody>{% for f in features %}<tr><td>{{ f.label }}</td><td class="num">{{ f.value|floatformat:1|intcomma }}</td><td class="num muted">{{ f.honest|floatformat:1|intcomma }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+{{ explanation|json_script:"explain-data" }}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const { C, bar } = HG;
+  const ex = JSON.parse(document.getElementById('explain-data').textContent);
+  // index to honest median = 1.0 so features of different units share one axis
+  const ratio = ex.map((e) => (e.honest_median ? +(e.value / e.honest_median).toFixed(2) : null));
+  bar('explainChart', ex.map((e) => e.label), [
+    { label: 'This provider (× honest median)', data: ratio, backgroundColor: ratio.map((r) => (r !== null && r >= 2 ? C.critical : C.s1)) },
+  ], { horizontal: true, xTitle: 'Multiple of the median honest provider (1× = typical)',
+       tooltip: { label: (c) => ` ${c.raw}× · value ${ex[c.dataIndex].value.toLocaleString()} vs ${ex[c.dataIndex].honest_median.toLocaleString()}` } });
+
+  const form = document.getElementById('review-form');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const res = await fetch(location.pathname, { method: 'POST', body: new FormData(form),
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': HG.csrf() } });
+    const msg = document.getElementById('review-msg');
+    const isJson = (res.headers.get('content-type') || '').includes('application/json');
+    if (res.ok && isJson) { const d = await res.json(); msg.textContent = `Saved · ${d.status}`; } else { form.submit(); }
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Setup{% endblock %}
+{% block heading %}Almost there{% endblock %}
+{% block content %}
+<div class="card p-4" style="max-width:640px">
+  <p>The models haven't been trained or the sample data hasn't been scored yet. From the project folder run:</p>
+  <pre class="bg-light p-3 rounded"><code>python manage.py setup_demo</code></pre>
+  <p class="secondary mb-0">This generates the sample claims, trains the fraud and readmission models, and loads the scores. Then refresh this page.</p>
+</div>
+{% endblock %}

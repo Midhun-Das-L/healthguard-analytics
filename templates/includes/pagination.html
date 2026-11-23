@@ -1,0 +1,12 @@
+{% if page.paginator.num_pages > 1 %}
+<nav class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+  <span class="small muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  <ul class="pagination pagination-sm mb-0">
+    {% if page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ querystring }}&page={{ page.previous_page_number }}">‹</a></li>{% endif %}
+    {% for n in page.paginator.page_range %}{% if n >= page.number|add:-2 and n <= page.number|add:2 %}
+      <li class="page-item {% if n == page.number %}active{% endif %}"><a class="page-link" href="?{{ querystring }}&page={{ n }}">{{ n }}</a></li>
+    {% endif %}{% endfor %}
+    {% if page.has_next %}<li class="page-item"><a class="page-link" href="?{{ querystring }}&page={{ page.next_page_number }}">›</a></li>{% endif %}
+  </ul>
+</nav>
+{% endif %}

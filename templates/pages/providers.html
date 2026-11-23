@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Provider risk list{% endblock %}
+{% block heading %}Provider risk list{% endblock %}
+{% block subheading %}{{ batch.name }} · {{ total|intcomma }} of {{ batch.n_providers|intcomma }} providers match{% endblock %}
+{% block actions %}<a class="btn btn-sm btn-outline-primary mb-0" href="{% url 'provider_export' %}?{{ querystring }}">Export CSV</a>{% endblock %}
+{% block content %}
+<div class="card mb-3"><div class="card-body py-3">
+  <form method="get" class="filters">
+    <div><label for="f-batch">Batch</label><select id="f-batch" name="batch" class="form-select">
+      {% for b in batches %}<option value="{{ b.id }}" {% if b.id == batch.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></div>
+    <div><label for="f-q">Provider ID</label><input id="f-q" name="q" value="{{ f.q }}" class="form-control" placeholder="PRV5…"></div>
+    <div><label for="f-risk">Risk level</label><select id="f-risk" name="risk" class="form-select">
+      <option value="">All</option>
+      <option {% if f.risk == 'High' %}selected{% endif %}>High</option><option {% if f.risk == 'Medium' %}selected{% endif %}>Medium</option><option {% if f.risk == 'Low' %}selected{% endif %}>Low</option></select></div>
+    <div><label for="f-status">Review status</label><select id="f-status" name="status" class="form-select"><option value="">All</option>
+      {% for key, label in statuses %}<option value="{{ key }}" {% if f.status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div><label for="f-min">Min. probability %</label><input id="f-min" name="min_prob" type="number" min="0" max="100" value="{{ f.min_prob }}" class="form-control" style="width:120px"></div>
+    <div><label for="f-sort">Sort by</label><select id="f-sort" name="sort" class="form-select">
+      <option value="-fraud_probability" {% if f.sort == '-fraud_probability' %}selected{% endif %}>Highest risk</option>
+      <option value="-total_reimbursed" {% if f.sort == '-total_reimbursed' %}selected{% endif %}>Most reimbursed</option>
+      <option value="-n_claims" {% if f.sort == '-n_claims' %}selected{% endif %}>Most claims</option>
+      <option value="provider_id" {% if f.sort == 'provider_id' %}selected{% endif %}>Provider ID</option></select></div>
+    <div><button class="btn btn-primary mb-0" type="submit">Apply</button> <a class="btn btn-link mb-0" href="?batch={{ batch.id }}">Reset</a></div>
+  </form>
+</div></div>
+<div class="card">
+  <div class="table-responsive"><table class="table table-hover">
+    <thead><tr><th>Provider</th><th>Fraud probability</th><th>Risk</th><th class="num">Beneficiaries</th><th class="num">Claims</th><th class="num">Inpatient</th><th class="num">Reimbursed</th><th class="num">$/claim</th>{% if batch.has_labels %}<th>Known outcome</th>{% endif %}<th>Status</th></tr></thead>
+    <tbody>
+    {% for p in page %}
+      <tr>
+        <td><a href="{% url 'provider_detail' p.pk %}"><strong>{{ p.provider_id }}</strong></a></td>
+        <td><div class="d-flex align-items-center gap-2"><div class="prob-bar"><span style="width:{% widthratio p.fraud_probability 1 100 %}%"></span></div>{% widthratio p.fraud_probability 1 100 %}%</div></td>
+        <td><span class="risk risk-{{ p.risk_level }}">{{ p.risk_level }}</span></td>
+        <td class="num">{{ p.n_beneficiaries|intcomma }}</td><td class="num">{{ p.n_claims|intcomma }}</td>
+        <td class="num">{{ p.inpatient_claims|intcomma }}</td>
+        <td class="num">${{ p.total_reimbursed|floatformat:0|intcomma }}</td>
+        <td class="num">${{ p.reimbursed_per_claim|floatformat:0|intcomma }}</td>
+        {% if batch.has_labels %}<td>{% if p.actual_fraud is None %}–{% elif p.actual_fraud %}Fraud{% else %}Not fraud{% endif %}</td>{% endif %}
+        <td><span class="status status-{{ p.review_status }}">{{ p.get_review_status_display }}</span></td>
+      </tr>
+    {% empty %}<tr><td colspan="10" class="muted py-4 text-center">No providers match these filters.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% include "includes/pagination.html" %}
+</div>
+{% endblock %}

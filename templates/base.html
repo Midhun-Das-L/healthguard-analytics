@@ -1,0 +1,33 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}HealthGuard{% endblock %} · HealthGuard Analytics</title>
+  <link rel="stylesheet" href="{% static 'css/soft-ui-dashboard.min.css' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block extrahead %}{% endblock %}
+</head>
+<body>
+<div class="app-shell">
+  {% include "includes/sidebar.html" %}
+  <main class="app-main">
+    <div class="app-topbar">
+      <div>
+        <h1>{% block heading %}{% endblock %}</h1>
+        <div class="sub">{% block subheading %}{% endblock %}</div>
+      </div>
+      <div class="d-flex align-items-center gap-2">{% block actions %}{% endblock %}</div>
+    </div>
+    {% for message in messages %}
+      <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} text-white py-2" role="alert">{{ message }}</div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'js/chartjs.min.js' %}"></script>
+<script src="{% static 'js/charts.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

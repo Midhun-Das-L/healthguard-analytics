@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Model performance{% endblock %}
+{% block heading %}Model performance{% endblock %}
+{% block subheading %}Hold-out evaluation recorded at training time · retrain with <code>python manage.py train_models</code>{% endblock %}
+{% block content %}
+{% if fraud %}
+<h5>Provider fraud model</h5>
+<p class="small secondary">Trained {{ fraud.trained_at }} on {{ fraud.n_train_providers }} providers ({% widthratio fraud.fraud_rate 1 100 %}% fraud) from <strong>{{ fraud.training_source }}</strong> data. Winner: <strong>{{ fraud.model_name }}</strong>.
+{% if fraud.training_source == "sample" %}<br>These numbers come from the bundled synthetic sample. Retrain on the real Kaggle files for production-grade figures.{% endif %}</p>
+<div class="row g-3 mb-4">
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">Candidate models (25% stratified hold-out)</div>
+    <div class="table-responsive"><table class="table"><thead><tr><th>Model</th><th class="num">ROC-AUC</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">Accuracy</th></tr></thead>
+    <tbody>{% for m in fraud.comparison %}<tr {% if m.model == fraud.model_name %}class="fw-bold"{% endif %}><td>{{ m.model }}{% if m.model == fraud.model_name %} ✓{% endif %}</td><td class="num">{{ m.roc_auc }}</td><td class="num">{{ m.precision }}</td><td class="num">{{ m.recall }}</td><td class="num">{{ m.f1 }}</td><td class="num">{{ m.accuracy }}</td></tr>{% endfor %}</tbody></table></div>
+    <div class="card-body pt-0 small secondary">Confusion matrix at 0.5 for the winner: {{ fraud.metrics.confusion.tp }} fraud caught · {{ fraud.metrics.confusion.fn }} missed · {{ fraud.metrics.confusion.fp }} false alarms · {{ fraud.metrics.confusion.tn }} correctly cleared.</div>
+  </div></div>
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">ROC curve: {{ fraud.model_name }}</div>
+    <div class="card-body"><div class="chart-box"><canvas id="fraudRoc"></canvas></div></div></div></div>
+</div>
+{% endif %}
+{% if readm %}
+<h5>Readmission model</h5>
+<p class="small secondary">{{ readm.model_name }} trained {{ readm.trained_at }} on {{ readm.n_rows }} encounters ({% widthratio readm.readmit_rate 1 100 %}% readmitted). Hold-out ROC-AUC {{ readm.metrics.roc_auc }}, recall {{ readm.metrics.recall }}, precision {{ readm.metrics.precision }}.</p>
+<div class="row g-3">
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">ROC curve</div><div class="card-body"><div class="chart-box"><canvas id="readmRoc"></canvas></div></div></div></div>
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">Strongest drivers<span class="hint">Standardised logistic-regression coefficients</span></div><div class="card-body"><div class="chart-box tall"><canvas id="drivers"></canvas></div></div></div></div>
+</div>
+{% endif %}
+{% if not fraud and not readm %}<div class="card p-4">No trained models yet. Run <code>python manage.py setup_demo</code>.</div>{% endif %}
+{{ fraud.metrics.roc_curve|json_script:"fraud-roc" }}{{ readm.metrics.roc_curve|json_script:"readm-roc" }}{{ readm.drivers|json_script:"readm-drivers" }}
+{% endblock %}
+{% block scripts %}<script>
+(function () {
+  const { C } = HG;
+  const read = (id) => { try { return JSON.parse(document.getElementById(id).textContent); } catch (e) { return null; } };
+  function roc(id, curve) {
+    if (!curve || !document.getElementById(id)) return;
+    HG.scatter(id, [
+      { label: 'Model', data: curve.fpr.map((x, i) => ({ x, y: curve.tpr[i] })), showLine: true, borderColor: C.s1, backgroundColor: C.s1, borderWidth: 2, pointRadius: 0 },
+      { label: 'Random guess', data: [{ x: 0, y: 0 }, { x: 1, y: 1 }], showLine: true, borderColor: C.muted, borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+    ], { xTitle: 'False positive rate', yTitle: 'True positive rate', x: { min: 0, max: 1 }, y: { min: 0, max: 1 },
+         options: { interaction: { mode: 'nearest', intersect: false } } });
+  }
+  roc('fraudRoc', read('fraud-roc'));
+  roc('readmRoc', read('readm-roc'));
+  const d = (read('readm-drivers') || []).slice(0, 12);
+  if (d.length) HG.bar('drivers', d.map((x) => x.label), [{ label: 'Coefficient', data: d.map((x) => x.coef), backgroundColor: d.map((x) => (x.coef > 0 ? C.critical : C.s1)) }],
+    { horizontal: true, xTitle: 'Coefficient (red raises risk, blue lowers it)' });
+})();
+</script>{% endblock %}

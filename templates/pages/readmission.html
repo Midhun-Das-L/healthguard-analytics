@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Readmission risk{% endblock %}
+{% block heading %}30-day readmission risk{% endblock %}
+{% block subheading %}Diabetic inpatient encounters · {{ info.model_name }} · ROC-AUC {{ info.metrics.roc_auc }}{% endblock %}
+{% block content %}
+<div class="note mb-3">Use this as a <strong>prioritisation aid, not a diagnosis</strong>: the prepared dataset is only weakly predictive (ROC-AUC {{ info.metrics.roc_auc }}). Patients in the High group are readmitted about 3× as often as Low, which makes it useful for deciding who gets a follow-up call first.</div>
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="label">Matching encounters</div><div class="value" data-r="encounters">–</div><div class="foot" data-r="patients">&nbsp;</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="label">High risk</div><div class="value" data-r="high_risk">–</div><div class="foot" data-r="high_foot">&nbsp;</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="label">Observed readmission</div><div class="value" data-r="actual_rate">–</div><div class="foot">within 30 days</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi"><div class="label">Follow-ups scheduled</div><div class="value" data-r="follow_ups">–</div><div class="foot" data-r="no_follow">&nbsp;</div></div></div>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">Risk score distribution<span class="hint">Matching encounters</span></div>
+    <div class="card-body"><div class="chart-box"><canvas id="rHist"></canvas></div></div></div></div>
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header">Avg risk score: insulin vs. no insulin</div>
+    <div class="card-body"><div class="chart-box"><canvas id="rInsulin"></canvas></div></div></div></div>
+</div>
+
+<div class="card mb-3"><div class="card-body py-3 d-flex justify-content-between flex-wrap gap-3">
+  <form method="get" class="filters" id="enc-filters">
+    <div><label for="f-q">Encounter / patient no.</label><input id="f-q" name="q" value="{{ f.q }}" class="form-control"></div>
+    <div><label for="f-risk">Risk level</label><select id="f-risk" name="risk" class="form-select"><option value="">All</option>
+      <option {% if f.risk == 'High' %}selected{% endif %}>High</option><option {% if f.risk == 'Medium' %}selected{% endif %}>Medium</option><option {% if f.risk == 'Low' %}selected{% endif %}>Low</option></select></div>
+    <div><label for="f-g">Gender</label><select id="f-g" name="gender" class="form-select"><option value="">All</option>
+      <option {% if f.gender == 'Female' %}selected{% endif %}>Female</option><option {% if f.gender == 'Male' %}selected{% endif %}>Male</option></select></div>
+    <div><label for="f-fu">Follow-up</label><select id="f-fu" name="follow_up" class="form-select"><option value="">Any</option>
+      <option value="no" {% if f.follow_up == 'no' %}selected{% endif %}>Not scheduled</option><option value="yes" {% if f.follow_up == 'yes' %}selected{% endif %}>Scheduled</option></select></div>
+    <div><button class="btn btn-primary mb-0">Apply</button> <a class="btn btn-link mb-0" href="{% url 'readmission' %}">Reset</a></div>
+  </form>
+  <form method="post" action="{% url 'readmission_score_file' %}" enctype="multipart/form-data" class="filters">{% csrf_token %}
+    <div><label for="{{ upload_form.file.id_for_label }}">Score a CSV (same columns as model_data.csv)</label>{{ upload_form.file }}</div>
+    <div><button class="btn btn-outline-primary mb-0">Score &amp; download</button></div>
+  </form>
+</div></div>
+
+<div class="card">
+  <div class="table-responsive"><table class="table table-hover">
+    <thead><tr><th>Encounter</th><th>Patient</th><th class="num">Age</th><th>Gender</th><th>Risk score</th><th>Risk</th><th>Insulin</th><th>Readmitted</th><th>Follow-up</th></tr></thead>
+    <tbody>{% for e in page %}
+      <tr><td><a href="{% url 'encounter_detail' e.encounter_id %}">{{ e.encounter_id }}</a></td><td>{{ e.patient_nbr }}</td><td class="num">{{ e.age|add:-5 }}–{{ e.age|add:5 }}</td><td>{{ e.gender }}</td>
+        <td><div class="d-flex align-items-center gap-2"><div class="prob-bar"><span style="width:{% widthratio e.readmission_probability 1 100 %}%"></span></div>{% widthratio e.readmission_probability 1 100 %}%</div></td>
+        <td><span class="risk risk-{{ e.risk_level }}">{{ e.risk_level }}</span></td><td>{{ e.on_insulin|yesno:"Yes,No" }}</td>
+        <td>{% if e.actual_readmitted is None %}–{% else %}{{ e.actual_readmitted|yesno:"Yes,No" }}{% endif %}</td>
+        <td><div class="form-check form-switch mb-0"><input class="form-check-input fu-toggle" type="checkbox" data-url="{% url 'encounter_follow_up' e.encounter_id %}" {% if e.follow_up_scheduled %}checked{% endif %} aria-label="Follow-up scheduled"></div></td></tr>
+    {% empty %}<tr><td colspan="9" class="muted text-center py-4">No encounters match.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% include "includes/pagination.html" %}
+</div>
+{% csrf_token %}
+{% endblock %}
+{% block scripts %}<script>
+(function () {
+  const { C, fmt, bar } = HG;
+  const setR = (k, v) => { const el = document.querySelector(`[data-r="${k}"]`); if (el) el.textContent = v; };
+  async function load() {
+    const res = await fetch(`{% url 'api_readmission' %}${location.search}`);
+    if (!res.ok) return;
+    const r = await res.json(), k = r.kpis;
+    setR('encounters', fmt.int(k.encounters)); setR('patients', `${fmt.int(k.patients)} patients`);
+    setR('high_risk', fmt.int(k.high_risk)); setR('high_foot', `${fmt.pct(k.high_risk_pct)} of matching`);
+    setR('actual_rate', fmt.pct(k.actual_rate)); setR('follow_ups', fmt.int(k.follow_ups));
+    setR('no_follow', `${fmt.int(k.high_risk_no_follow_up)} high-risk without one`);
+    bar('rHist', r.histogram.labels, [{ label: 'Encounters', data: r.histogram.counts, backgroundColor: C.s1 }], { xTitle: 'Risk score', yTitle: 'Encounters' });
+    bar('rInsulin', ['On insulin', 'Not on insulin'], [{ label: 'Avg risk score', data: [r.insulin.on, r.insulin.off], backgroundColor: C.s1 }],
+        { yTitle: 'Avg risk score (%)', tooltip: { label: (c) => ` ${c.raw}%` } });
+  }
+  document.querySelectorAll('.fu-toggle').forEach((el) => el.addEventListener('change', async () => {
+    const body = new FormData(); body.append('value', el.checked ? '1' : '0');
+    const res = await fetch(el.dataset.url, { method: 'POST', body, headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': HG.csrf() } });
+    if (!res.ok) { el.checked = !el.checked; alert('Could not save follow-up.'); } else { load(); }
+  }));
+  load();
+})();
+</script>{% endblock %}

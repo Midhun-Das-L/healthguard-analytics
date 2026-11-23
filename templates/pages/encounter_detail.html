@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Encounter {{ e.encounter_id }}{% endblock %}
+{% block heading %}Encounter {{ e.encounter_id }}{% endblock %}
+{% block subheading %}Patient {{ e.patient_nbr }} · {{ e.gender }} · age {{ e.age|add:-5 }}–{{ e.age|add:5 }} · {{ e.race }}{% endblock %}
+{% block actions %}<a class="btn btn-sm btn-outline-secondary mb-0" href="{% url 'readmission' %}">← Back</a>{% endblock %}
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-sm-4"><div class="card kpi"><div class="label">Readmission risk score</div><div class="value">{% widthratio e.readmission_probability 1 100 %}%</div><div class="foot"><span class="risk risk-{{ e.risk_level }}">{{ e.risk_level }} risk</span></div></div></div>
+  <div class="col-sm-4"><div class="card kpi"><div class="label">Observed outcome</div><div class="value">{% if e.actual_readmitted is None %}–{% elif e.actual_readmitted %}Readmitted{% else %}Not readmitted{% endif %}</div><div class="foot">within 30 days</div></div></div>
+  <div class="col-sm-4"><div class="card kpi"><div class="label">Follow-up</div>
+    <form method="post" action="{% url 'encounter_follow_up' e.encounter_id %}">{% csrf_token %}
+      <input type="hidden" name="value" value="{% if e.follow_up_scheduled %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{{ request.path }}">
+      <div class="value">{{ e.follow_up_scheduled|yesno:"Scheduled,Not scheduled" }}</div>
+      <button class="btn btn-sm btn-outline-primary mb-0 mt-1">{% if e.follow_up_scheduled %}Unschedule{% else %}Mark scheduled{% endif %}</button></form></div></div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-7"><div class="card h-100"><div class="card-header">Factors behind this score<span class="hint">Contribution to the log-odds: positive raises risk, negative lowers it</span></div>
+    <div class="card-body"><div class="chart-box tall"><canvas id="factorChart"></canvas></div></div>
+    <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Factor</th><th class="num">Value</th><th class="num">Contribution</th></tr></thead>
+      <tbody>{% for f in factors %}<tr><td>{{ f.label }}</td><td class="num">{{ f.value }}</td><td class="num">{{ f.contribution }}</td></tr>{% endfor %}</tbody></table></div>
+  </div></div>
+  <div class="col-lg-5"><div class="card h-100"><div class="card-header">Other encounters for this patient</div>
+    <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Encounter</th><th>Risk score</th><th>Readmitted</th></tr></thead>
+      <tbody>{% for o in others %}<tr><td><a href="{% url 'encounter_detail' o.encounter_id %}">{{ o.encounter_id }}</a></td><td>{% widthratio o.readmission_probability 1 100 %}%</td><td>{% if o.actual_readmitted is None %}–{% else %}{{ o.actual_readmitted|yesno:"Yes,No" }}{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="3" class="muted">None in this dataset.</td></tr>{% endfor %}</tbody></table></div>
+  </div></div>
+</div>
+{{ factors|json_script:"factors" }}
+{% endblock %}
+{% block scripts %}<script>
+const f = JSON.parse(document.getElementById('factors').textContent);
+HG.bar('factorChart', f.map((x) => x.label), [{ label: 'Contribution', data: f.map((x) => x.contribution),
+  backgroundColor: f.map((x) => (x.contribution > 0 ? HG.C.critical : HG.C.s1)) }],
+  { horizontal: true, xTitle: 'Contribution to log-odds (red raises risk, blue lowers it)', options: { scales: { x: HG.axis('Contribution (red raises risk, blue lowers it)'), y: HG.axis(null, { grid: { display: false } }) }, plugins: { legend: { display: false } } } });
+</script>{% endblock %}
